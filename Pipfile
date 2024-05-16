@@ -9,6 +9,7 @@ django = "*"
 djangorestframework = "*"
 python-decouple = "*"
 drf-spectacular = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 
