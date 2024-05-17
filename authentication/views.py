@@ -7,16 +7,16 @@ from django.utils import timezone
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
 
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .email import Util
 
 from .models import CustomUser
-from .serializers import RegistrationSerializer
-
+from .serializers import RegistrationSerializer, LoginSerializer
 
 
 
@@ -95,3 +95,35 @@ def verify_email(request, uidb64, token):
         return Response({'message': 'Account verified successfully'}, status=status.HTTP_200_OK)
     else:
         return Response({'error': 'Invalid verification link'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LoginAPIView(generics.GenericAPIView):
+    permission_classes = [AllowAny, ]
+    serializer_class = LoginSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except serializers.ValidationError as e:
+            # Check if the error message is for user verification
+            if 'This user has not been verified' in str(e):
+                # If the error is related to user verification, return a custom error message
+                return Response({'error': 'This user has not been verified, please check your email for the verification link'}, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                # Return other validation errors
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = serializer.validated_data.get('user')
+
+        if user:
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
+            return Response({
+                'message': 'Login successful',
+                'refresh': str(refresh),
+                'access': access_token
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)

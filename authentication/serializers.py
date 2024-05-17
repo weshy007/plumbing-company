@@ -32,11 +32,10 @@ class LoginSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         email = attrs.get('email', '')
-        username = attrs.get('username', '')
         password = attrs.get('password', '')
 
-        # Get the user object based on email or username
-        user = CustomUser.objects.filter(email=email).first() or CustomUser.objects.filter(username=username).first()
+        # Get the user object based on email
+        user = CustomUser.objects.filter(email=email).first()
 
         if user is None:
             raise serializers.ValidationError('A user with this email and password is not found')
@@ -48,7 +47,7 @@ class LoginSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('This user has not been verified')
 
         # Add the user object to validated data
-        attrs['user'] = user
+        attrs['user'] = self.context["request"].user
 
         return attrs
 
@@ -59,13 +58,3 @@ class LoginSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'password': {'write_only': True}
         }
-
-
-
-
-
-# class CustomUserSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = CustomUser
-#         fields = ['id', 'username', 'email', 'is_verified', 'is_active']
-#         read_only_fields = ['is_verified', 'is_active']
