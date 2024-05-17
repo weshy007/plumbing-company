@@ -2,10 +2,13 @@ from datetime import timedelta
 
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.sites.shortcuts import get_current_site
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes
+
+from drf_spectacular.utils import extend_schema
 
 from rest_framework import generics, status, serializers
 from rest_framework.decorators import api_view
@@ -68,6 +71,8 @@ class RegistrationAPIView(generics.CreateAPIView):
         return Response(res, status=status.HTTP_201_CREATED)
 
 
+
+@extend_schema(request=None, responses=None)
 @api_view(['GET'])
 def verify_email(request, uidb64, token):
     try:
@@ -81,8 +86,8 @@ def verify_email(request, uidb64, token):
         if user.verification_token != token:
             return Response({'error': 'Invalid verification link'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check if the token has expired (valid for 24 hours)
-        if user.token_created_at < timezone.now() - timedelta(days=1):
+        # Check if the token has expired (valid for 5 minutes)
+        if user.token_created_at < timezone.now() - timedelta(minutes=5):
             return Response({'error': 'Expired verification link'}, status=status.HTTP_400_BAD_REQUEST)
         
 
@@ -95,6 +100,38 @@ def verify_email(request, uidb64, token):
         return Response({'message': 'Account verified successfully'}, status=status.HTTP_200_OK)
     else:
         return Response({'error': 'Invalid verification link'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def resend_verification_email(request, user):
+    # Check if the user has recently requested a verification link
+    last_request_time = cache.get(f"verification_request:{user.id}")
+
+    if last_request_time:
+        # If a request has been made recently, prevent another request within a cooldown period (5 minutes)
+        cooldown_period = timedelta(minutes=5)
+
+        if last_request_time + cooldown_period > timezone.now():
+            # Return an error or message indicating that the user should wait before making another request
+            return None  
+
+    # Generate verification token and construct verification link
+    token = default_token_generator.make_token(user)
+    uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    verification_link = reverse('verify', kwargs={'uidb64': uidb64, 'token': token})
+    verification_url = f"http://{get_current_site(request).domain}{verification_link}"
+
+    # Send verification email to the user
+    email_data = {
+        'email_subject': 'Account Verification',
+        'email_body': f'Please click the link to verify your account: {verification_url}',
+        'to_email': user.email
+    }
+    Util.send_email(email_data)
+
+    # Update the last request time in the cache
+    cache.set(f"verification_request:{user.id}", timezone.now(), timeout=cooldown_period)
+
+    return verification_url
 
 
 class LoginAPIView(generics.GenericAPIView):
