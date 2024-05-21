@@ -58,3 +58,10 @@ class LoginSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'password': {'write_only': True}
         }
+
+
+class RequestPasswordResetEmailSerializer(serializers.Serializer):
+    email = serializers.EmailField(min_length=3)
+
+    class Meta:
+        fields = ['email']

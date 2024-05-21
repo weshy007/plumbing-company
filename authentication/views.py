@@ -1,12 +1,12 @@
 from datetime import timedelta
 
-from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.tokens import default_token_generator, PasswordResetTokenGenerator
 from django.contrib.sites.shortcuts import get_current_site
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.encoding import force_bytes, smart_str, smart_bytes
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-from django.utils.encoding import force_bytes
 
 from drf_spectacular.utils import extend_schema
 
@@ -19,7 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .email import Util
 
 from .models import CustomUser
-from .serializers import RegistrationSerializer, LoginSerializer
+from .serializers import RegistrationSerializer, LoginSerializer, RequestPasswordResetEmailSerializer
 
 
 
@@ -114,11 +114,21 @@ def resend_verification_email(request, user):
             # Return an error or message indicating that the user should wait before making another request
             return None  
 
-    # Generate verification token and construct verification link
+    # Generate verification token
     token = default_token_generator.make_token(user)
+
+    # Store verification token and token creation timestamp in the user model
+    user.verification_token = token
+    user.token_created_at = timezone.now()
+    user.save()
+
+    # Construct verification link
     uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+    current_site = get_current_site(request)
     verification_link = reverse('verify', kwargs={'uidb64': uidb64, 'token': token})
-    verification_url = f"http://{get_current_site(request).domain}{verification_link}"
+
+    # Construct verification URL
+    verification_url = f"http://{current_site.domain}{verification_link}"
 
     # Send verification email to the user
     email_data = {
@@ -164,3 +174,30 @@ class LoginAPIView(generics.GenericAPIView):
             }, status=status.HTTP_200_OK)
         else:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class RequestPasswordResetEmail(generics.GenericAPIView):
+    serializer_class = RequestPasswordResetEmailSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        email = request.data.get('email')
+
+        if request.data.get('email') is None:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if CustomUser.objects.filter(email=email).exists():
+            user = CustomUser.objects.get(email=email)
+            uidb64 = urlsafe_base64_encode(smart_bytes(user.pk))
+            token = PasswordResetTokenGenerator().make_token(user)
+
+            current_site = get_current_site(request=request).domain
+            relative_link = reverse('password-reset-confirm', kwargs={'uidb64': uidb64, 'token': token})
+            absolute_url = f"http://{current_site}{relative_link}"
+            email_body = 'Hello, \n Use the link below to reset password for your account \n' + absolute_url  
+            data = {'email_body': email_body, 'to_email': user.email, 'email_subject':'Password Reset'}
+
+            Util.send_email(data)
+
+        
+        return Response({'success': 'We have sent a reset link in your email. Please check it out'}, status=status.HTTP_200_OK)
