@@ -5,7 +5,7 @@ from django.contrib.sites.shortcuts import get_current_site
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import force_bytes, smart_str, smart_bytes
+from django.utils.encoding import force_bytes, smart_str, smart_bytes, DjangoUnicodeDecodeError
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 
 from drf_spectacular.utils import extend_schema
@@ -19,7 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .email import Util
 
 from .models import CustomUser
-from .serializers import RegistrationSerializer, LoginSerializer, RequestPasswordResetEmailSerializer
+from .serializers import RegistrationSerializer, LoginSerializer, RequestPasswordResetEmailSerializer, CustomTokenObtainPairSerializer, SetNewPasswordSerializer
 
 
 
@@ -188,7 +188,7 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
 
         if CustomUser.objects.filter(email=email).exists():
             user = CustomUser.objects.get(email=email)
-            uidb64 = urlsafe_base64_encode(smart_bytes(user.pk))
+            uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
 
             current_site = get_current_site(request=request).domain
@@ -201,3 +201,22 @@ class RequestPasswordResetEmail(generics.GenericAPIView):
 
         
         return Response({'success': 'We have sent a reset link in your email. Please check it out'}, status=status.HTTP_200_OK)
+
+
+class PasswordTokenViewAPI(generics.GenericAPIView):
+    seriliazer_class = CustomTokenObtainPairSerializer
+
+    def get(self, request, uidb64, token):
+        try:
+            id = smart_str(urlsafe_base64_decode(uidb64))
+            user = CustomUser.objects.get(id=id)
+
+            if not PasswordResetTokenGenerator().check_token(user, token):
+                return Response({'error': 'Token is not valid, please request a new one'}, status=status.HTTP_401_UNAUTHORIZED)
+
+            return Response({'success': True, 'message': 'Credentials are valid', 'uidb64': uidb64, 'token': token}, status=status.HTTP_200_OK)
+        
+        except DjangoUnicodeDecodeError as e:
+            return Response({'error': 'Token is not valid, please request a new one'}, status=status.HTTP_401_UNAUTHORIZED)
+
+
