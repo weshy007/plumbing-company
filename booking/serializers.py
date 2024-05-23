@@ -6,8 +6,9 @@ from .models import RepairRequest
 class RepairRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = RepairRequest
-        fields = '__all__'
+        fields = ['name', 'email', 'phone_number', 'address', 'description', 'image']
         read_only_fields = ['created_at']
+        extra_kwargs = {'otp': {'write_only': True}}
 
     def validate_phone_number(self, value):
         if not value.isdigit():
@@ -20,3 +21,11 @@ class RepairRequestSerializer(serializers.ModelSerializer):
         if '@' not in value:
             raise serializers.ValidationError("Invalid email address.")
         return value
+    
+
+class OTPGenerateSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class OTPVerifySerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    otp = serializers.CharField(max_length=6)

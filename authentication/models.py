@@ -41,6 +41,7 @@ class CustomUser(AbstractUser):
     token_created_at = models.DateTimeField(blank=True, null=True)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    is_available = models.BooleanField(default=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
