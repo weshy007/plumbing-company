@@ -10,6 +10,7 @@ djangorestframework = "*"
 python-decouple = "*"
 drf-spectacular = "*"
 djangorestframework-simplejwt = "*"
+pillow = "*"
 
 [dev-packages]
 
