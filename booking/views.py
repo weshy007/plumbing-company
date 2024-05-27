@@ -64,23 +64,22 @@ class OTPGenerateAPIView(APIView):
 
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data.get('email')
-            repair_request = RepairRequest.objects.create(email=email)
-            repair_request.generate_otp()
-            otp = repair_request.otp
-
-            # send OTP to user's email
-            email_data = {
-                'email_subject': 'OTP for Repair Request',
-                'email_body': f'Your OTP for the repair request is: {otp}',
-                'to_email': email
-            }
-            Util.send_email(email_data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
         
-            return Response({'message': 'OTP generated successfully.'}, status=status.HTTP_200_OK)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        repair_request = RepairRequest.objects.create(email=email)
+        repair_request.generate_otp()
+        otp = repair_request.otp
+
+        # Send OTP to user's email
+        email_data = {
+            'email_subject': 'OTP for Repair Request',
+            'email_body': f'Your OTP for the repair request is: {otp}',
+            'to_email': email
+        }
+        Util.send_email(email_data)
+        
+        return Response({'message': 'OTP generated successfully.'}, status=status.HTTP_200_OK)
 
 class OTPVerifyAPIView(APIView):
     serializer_class = OTPVerifySerializer
@@ -88,15 +87,39 @@ class OTPVerifyAPIView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        validated_data = serializer.validated_data
-        email = validated_data['email']
-        otp = validated_data['otp']
-
+        email = serializer.validated_data['email']
+        otp = serializer.validated_data['otp']
+        
         try:
-            repair_request = RepairRequest.objects.get(email=email, otp=otp)
+            repair_request = RepairRequest.objects.get(email=email, otp=otp, is_completed=False)
             repair_request.otp = None  
             repair_request.otp_created_at = None
+            repair_request.is_completed = True
             repair_request.save()
-            return Response({'message': 'OTP verified successfully.'}, status=status.HTTP_200_OK)
+
+            # Assign the repair request to an available plumber
+            plumber = CustomUser.objects.filter(is_available=True).first()
+
+            if plumber:
+                repair_request.plumber = plumber
+                plumber.is_available = False
+                plumber.save()
+                repair_request.save()
+
+                # Send confirmation email to the user
+                email_data = {
+                    'email_subject': 'Repair Request Confirmation',
+                    'email_body': f'Thank you for your repair request, {repair_request.name}. We will contact you shortly.',
+                    'to_email': repair_request.email,
+                }
+                Util.send_email(email_data)
+
+                return Response({
+                    'message': 'Repair request created successfully. Please check your email for confirmation.',
+                    'repair_request_id': repair_request.id
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({'error': 'No available plumber at the moment. Please try again later.'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        
         except RepairRequest.DoesNotExist:
-            raise ValidationError({'error': 'Invalid OTP or email.'})
+            return Response({'error': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
