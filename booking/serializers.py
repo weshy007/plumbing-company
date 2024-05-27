@@ -6,7 +6,7 @@ from .models import RepairRequest, Parts
 class PartsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Parts
-        fields = ['name', 'description', 'quantity']
+        fields = ['name', 'description', 'quantity', 'added_by']
 
 
 

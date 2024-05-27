@@ -126,7 +126,6 @@ class OTPVerifyAPIView(APIView):
         
 
 # PLUMBERS APPOINTMENTS API VIEW
-
 class PlumberAppointmentsAPIView(generics.ListAPIView):
     serializer_class = RepairRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
