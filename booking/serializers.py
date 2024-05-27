@@ -1,12 +1,22 @@
 from rest_framework import serializers
 
-from .models import RepairRequest
+from .models import RepairRequest, Parts
+
+# Create your serializers here.
+class PartsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Parts
+        fields = ['name', 'description', 'quantity']
+
 
 
 class RepairRequestSerializer(serializers.ModelSerializer):
+    parts = PartsSerializer(many=True, required=False, read_only=True)
+    plumber_name = serializers.CharField(source='plumber.username', read_only=True)
+    
     class Meta:
         model = RepairRequest
-        fields = ['name', 'email', 'phone_number', 'address', 'description', 'image']
+        fields = ['name', 'email', 'phone_number', 'plumber_name', 'address', 'description', 'image', 'parts']
         read_only_fields = ['created_at']
         extra_kwargs = {'otp': {'write_only': True}}
 

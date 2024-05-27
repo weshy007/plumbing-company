@@ -6,6 +6,16 @@ from django.utils import timezone
 from authentication.models import CustomUser
 
 # Create your models here.
+class Parts(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    quantity = models.IntegerField(default=1)
+    added_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def __strt__(self):
+        return self.name
+    
+
 class RepairRequest(models.Model):
     name = models.CharField(max_length=100)
     email = models.EmailField() 
@@ -18,6 +28,7 @@ class RepairRequest(models.Model):
     otp = models.CharField(max_length=6, blank=True, null=True)
     otp_created_at = models.DateTimeField(blank=True, null=True)
     is_completed = models.BooleanField(default=False)
+    parts = models.ManyToManyField(Parts, related_name='repair_requests')
 
 
     def __str__(self):
